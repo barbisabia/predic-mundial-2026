@@ -4,24 +4,80 @@ from scipy.stats import poisson
 import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
+import requests
 
 st.set_page_config(page_title="Dashboard Prode 2026", layout="wide")
 
-equipos_elo = {
-    "Argentina": 2140, "Francia": 2110, "Brasil": 2080, "España": 2040, 
-    "Inglaterra": 2030, "Bélgica": 2000, "Países Bajos": 1980, "Alemania": 1970, 
-    "Portugal": 1960, "Uruguay": 1940, "Colombia": 1920, "Croacia": 1880, 
-    "México": 1850, "Estados Unidos": 1830, "Senegal": 1780, "Marruecos": 1770, 
-    "Japón": 1760, "Argelia": 1750, "Ecuador": 1740, "Paraguay": 1700,
-    "Corea del Sur": 1690, "Suiza": 1680, "Austria": 1670, "Suecia": 1660,
-    "Turquía": 1650, "República Checa": 1640, "Noruega": 1630, "Australia": 1620,
-    "Escocia": 1610, "Canadá": 1600, "Túnez": 1590, "Egipto": 1580,
-    "Irán": 1570, "Costa de Marfil": 1560, "Uzbekistán": 1550, 
-    "Bosnia y Herzegovina": 1540, "Panamá": 1530, "Ghana": 1520, 
-    "Arabia Saudita": 1510, "Qatar": 1500, "Nueva Zelanda": 1490, 
-    "Sudáfrica": 1480, "Jordania": 1470, "Cabo Verde": 1460, 
-    "Irak": 1450, "RD Congo": 1440, "Haití": 1430, "Curazao": 1420
-}
+@st.cache_data(ttl=86400)
+def obtener_elo_en_vivo():
+# Diccionario de respaldo actualizado con los datos del archivo World.tsv (Mayo 2026)
+    elo_backup = {
+        "España": 2165, "Argentina": 2113, "Francia": 2081, "Inglaterra": 2020, 
+        "Brasil": 1984, "Portugal": 1984, "Colombia": 1975, "Países Bajos": 1961, 
+        "Ecuador": 1933, "Croacia": 1930, "Alemania": 1923, "Noruega": 1912, 
+        "Japón": 1904, "Turquía": 1902, "Uruguay": 1892, "Suiza": 1889, 
+        "Senegal": 1878, "Bélgica": 1867, "México": 1860, "Paraguay": 1833, 
+        "Austria": 1827, "Marruecos": 1821, "Canadá": 1784, "Australia": 1783, 
+        "Irán": 1760, "Corea del Sur": 1752, "Argelia": 1743, "Estados Unidos": 1721,
+        "Suecia": 1719, "República Checa": 1726, "Escocia": 1610, "Túnez": 1636, 
+        "Egipto": 1689, "Costa de Marfil": 1614, "Uzbekistán": 1727, 
+        "Bosnia y Herzegovina": 1594, "Panamá": 1737, "Ghana": 1503, 
+        "Arabia Saudita": 1568, "Qatar": 1425, "Nueva Zelanda": 1585, 
+        "Sudáfrica": 1524, "Jordania": 1690, "Cabo Verde": 1549, "Irak": 1607, 
+        "RD Congo": 1655, "Haití": 1532, "Curazao": 1436
+    }
+    
+    try:
+        url = "https://www.eloratings.net/World.tsv"
+        headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'}
+        respuesta = requests.get(url, headers=headers, timeout=10)
+        respuesta.raise_for_status()
+        
+        lineas = respuesta.text.split('\n')
+        elo_descargado = {}
+        
+        for linea in lineas:
+            columnas = linea.split('\t')
+            # En el TSV: [2] es el Código del País, [3] es el puntaje Elo
+            if len(columnas) >= 4:
+                codigo_pais = columnas[2].strip()
+                try:
+                    rating = int(columnas[3])
+                    elo_descargado[codigo_pais] = rating
+                except ValueError:
+                    continue
+                    
+        # Mapeo exacto de códigos ISO/TSV a los nombres en tu dashboard
+        traducciones = {
+            "AR": "Argentina", "FR": "Francia", "BR": "Brasil", "ES": "España",
+            "EN": "Inglaterra", "BE": "Bélgica", "NL": "Países Bajos", "DE": "Alemania",
+            "PT": "Portugal", "UY": "Uruguay", "CO": "Colombia", "HR": "Croacia",
+            "MX": "México", "US": "Estados Unidos", "SN": "Senegal", "MA": "Marruecos",
+            "JP": "Japón", "DZ": "Argelia", "EC": "Ecuador", "PY": "Paraguay",
+            "KR": "Corea del Sur", "CH": "Suiza", "AT": "Austria", "SE": "Suecia",
+            "TR": "Turquía", "CZ": "República Checa", "NO": "Noruega", "AU": "Australia",
+            "SC": "Escocia", "CA": "Canadá", "TN": "Túnez", "EG": "Egipto",
+            "IR": "Irán", "CI": "Costa de Marfil", "UZ": "Uzbekistán",
+            "BA": "Bosnia y Herzegovina", "PA": "Panamá", "GH": "Ghana",
+            "SA": "Arabia Saudita", "QA": "Qatar", "NZ": "Nueva Zelanda",
+            "ZA": "Sudáfrica", "JO": "Jordania", "CV": "Cabo Verde",
+            "IQ": "Irak", "CD": "RD Congo", "HT": "Haití", "CW": "Curazao"
+        }
+        
+        elo_final = {}
+        
+        for codigo, eq_esp in traducciones.items():
+            if codigo in elo_descargado:
+                elo_final[eq_esp] = elo_descargado[codigo]
+            else:
+                elo_final[eq_esp] = elo_backup[eq_esp]
+                
+        return elo_final
+
+    except Exception as e:
+        return elo_backup
+
+equipos_elo = obtener_elo_en_vivo()
 
 grupos = {
     "Grupo A": ["México", "Sudáfrica", "Corea del Sur", "República Checa"],
@@ -82,18 +138,13 @@ def simular_grupo_montecarlo(equipos_grupo, elo_dict, iteraciones=1000):
                 goles_fav[eq_a] += goles_a
                 goles_fav[eq_b] += goles_b
                 
-                if goles_a > goles_b:
-                    puntos[eq_a] += 3
-                elif goles_b > goles_a:
-                    puntos[eq_b] += 3
+                if goles_a > goles_b: puntos[eq_a] += 3
+                elif goles_b > goles_a: puntos[eq_b] += 3
                 else:
                     puntos[eq_a] += 1
                     puntos[eq_b] += 1
         
-        tabla = []
-        for eq in equipos_grupo:
-            tabla.append((puntos[eq], goles_dif[eq], goles_fav[eq], eq))
-        
+        tabla = [(puntos[eq], goles_dif[eq], goles_fav[eq], eq) for eq in equipos_grupo]
         tabla.sort(reverse=True)
         
         for pos, data in enumerate(tabla):
@@ -110,11 +161,10 @@ def simular_grupo_montecarlo(equipos_grupo, elo_dict, iteraciones=1000):
             "4º Lugar": (pos_counts[3] / iteraciones) * 100
         })
     
-    df = pd.DataFrame(df_res).set_index("Equipo")
-    return df
+    return pd.DataFrame(df_res).set_index("Equipo")
 
 def simular_torneo_completo(elo_dict, grupos_dict, iteraciones=1000):
-    estadisticas = {eq: {"Octavos": 0, "Cuartos": 0, "Semis": 0, "Final": 0, "Campeon": 0} for eq in elo_dict.keys()}
+    estadisticas = {eq: {"16avos": 0, "Octavos": 0, "Cuartos": 0, "Semis": 0, "Final": 0, "Campeon": 0} for eq in elo_dict.keys()}
     
     progress_bar = st.progress(0)
     status_text = st.empty()
@@ -123,11 +173,13 @@ def simular_torneo_completo(elo_dict, grupos_dict, iteraciones=1000):
         if i % max(1, (iteraciones // 10)) == 0:
             progreso = int((i / iteraciones) * 100)
             progress_bar.progress(progreso)
-            status_text.text(f"Simulando torneo... {progreso}%")
+            status_text.text(f"Simulando algoritmo... {progreso}%")
             
-        clasificados_grupos = []
+        posiciones_grupos = {}
+        todos_los_terceros = []
         
         for nombre, equipos in grupos_dict.items():
+            g_letra = nombre.split()[-1] 
             puntos = {eq: 0 for eq in equipos}
             goles_dif = {eq: 0 for eq in equipos}
             
@@ -149,52 +201,74 @@ def simular_torneo_completo(elo_dict, grupos_dict, iteraciones=1000):
                         puntos[eq_a] += 1
                         puntos[eq_b] += 1
                         
-            tabla = [(puntos[eq], goles_dif[eq], eq) for eq in equipos]
-            tabla.sort(reverse=True)
-            clasificados_grupos.extend([tabla[0][2], tabla[1][2]])
+            tabla_grupo = [(puntos[eq], goles_dif[eq], eq) for eq in equipos]
+            tabla_grupo.sort(reverse=True)
             
-        faltantes = 32 - len(clasificados_grupos)
-        terceros_disponibles = [eq for eq in elo_dict.keys() if eq not in clasificados_grupos][:faltantes]
-        llave_32 = clasificados_grupos + terceros_disponibles
+            posiciones_grupos[g_letra] = [tabla_grupo[0][2], tabla_grupo[1][2], tabla_grupo[2][2], tabla_grupo[3][2]]
+            todos_los_terceros.append((tabla_grupo[2][0], tabla_grupo[2][1], tabla_grupo[2][2]))
+            
+        todos_los_terceros.sort(reverse=True)
+        mejores_terceros = [t[2] for t in todos_los_terceros[:8]]
         
-        def jugar_fase(equipos_activos):
-            siguiente_ronda = []
-            for j in range(0, len(equipos_activos), 2):
-                eq_1 = equipos_activos[j]
-                eq_2 = equipos_activos[j+1]
-                xg_1 = max(0.1, 1.0 + (elo_dict[eq_1] - elo_dict[eq_2]) / 200)
-                xg_2 = max(0.1, 1.0 + (elo_dict[eq_2] - elo_dict[eq_1]) / 200)
-                
-                prob_1 = xg_1 / (xg_1 + xg_2)
-                if np.random.random() < prob_1:
-                    siguiente_ronda.append(eq_1)
-                else:
-                    siguiente_ronda.append(eq_2)
-            return siguiente_ronda
+        p = posiciones_grupos
+        t = mejores_terceros
+        
+        partidos_r32 = [
+            (p["E"][0], t[0]), (p["I"][0], t[1]),
+            (p["A"][1], p["B"][1]), (p["F"][0], p["C"][1]),
+            (p["K"][1], p["L"][1]), (p["H"][0], p["J"][1]),
+            (p["D"][0], t[2]), (p["G"][0], t[3]),
+            (p["C"][0], p["F"][1]), (p["E"][1], p["I"][1]),
+            (p["A"][0], t[4]), (p["L"][0], t[5]),
+            (p["J"][0], p["H"][1]), (p["D"][1], p["G"][1]),
+            (p["B"][0], t[6]), (p["K"][0], t[7])
+        ]
+        
+        def jugar_match(eq_1, eq_2):
+            xg_1 = max(0.1, 1.0 + (elo_dict[eq_1] - elo_dict[eq_2]) / 200)
+            xg_2 = max(0.1, 1.0 + (elo_dict[eq_2] - elo_dict[eq_1]) / 200)
+            prob_1 = xg_1 / (xg_1 + xg_2)
+            return eq_1 if np.random.random() < prob_1 else eq_2
 
-        octavos = jugar_fase(llave_32)
-        for eq in octavos: estadisticas[eq]["Octavos"] += 1
+        ganadores_r32 = []
+        for eq1, eq2 in partidos_r32:
+            ganador = jugar_match(eq1, eq2)
+            ganadores_r32.append(ganador)
+            estadisticas[ganador]["16avos"] += 1
             
-        cuartos = jugar_fase(octavos)
-        for eq in cuartos: estadisticas[eq]["Cuartos"] += 1
+        ganadores_r16 = []
+        for j in range(0, len(ganadores_r32), 2):
+            ganador = jugar_match(ganadores_r32[j], ganadores_r32[j+1])
+            ganadores_r16.append(ganador)
+            estadisticas[ganador]["Octavos"] += 1
             
-        semis = jugar_fase(cuartos)
-        for eq in semis: estadisticas[eq]["Semis"] += 1
+        ganadores_qf = []
+        for j in range(0, len(ganadores_r16), 2):
+            ganador = jugar_match(ganadores_r16[j], ganadores_r16[j+1])
+            ganadores_qf.append(ganador)
+            estadisticas[ganador]["Cuartos"] += 1
             
-        finalistas = jugar_fase(semis)
-        for eq in finalistas: estadisticas[eq]["Final"] += 1
+        ganadores_sf = []
+        for j in range(0, len(ganadores_qf), 2):
+            ganador = jugar_match(ganadores_qf[j], ganadores_qf[j+1])
+            ganadores_sf.append(ganador)
+            estadisticas[ganador]["Semis"] += 1
             
-        campeon = jugar_fase(finalistas)
-        estadisticas[campeon[0]]["Campeon"] += 1
+        for eq in ganadores_sf:
+            estadisticas[eq]["Final"] += 1
+            
+        campeon = jugar_match(ganadores_sf[0], ganadores_sf[1])
+        estadisticas[campeon]["Campeon"] += 1
 
     progress_bar.empty()
     status_text.empty()
     
     df_res = []
     for eq, stats in estadisticas.items():
-        if stats["Octavos"] > 0:
+        if stats["16avos"] > 0:
             df_res.append({
                 "Equipo": eq,
+                "16avos": (stats["16avos"] / iteraciones) * 100,
                 "Octavos": (stats["Octavos"] / iteraciones) * 100,
                 "Cuartos": (stats["Cuartos"] / iteraciones) * 100,
                 "Semifinal": (stats["Semis"] / iteraciones) * 100,
@@ -202,8 +276,7 @@ def simular_torneo_completo(elo_dict, grupos_dict, iteraciones=1000):
                 "Campeón": (stats["Campeon"] / iteraciones) * 100
             })
             
-    df = pd.DataFrame(df_res).set_index("Equipo").sort_values(by="Campeón", ascending=False)
-    return df
+    return pd.DataFrame(df_res).set_index("Equipo").sort_values(by="Campeón", ascending=False)
 
 st.title("Dashboard Analítico - Mundial 2026")
 
@@ -350,7 +423,7 @@ with tab_libre:
 # --- PESTAÑA 4: LLAVES ELIMINATORIAS ---
 with tab_llaves:
     st.subheader("Calculadora Visual de Llaves Eliminatorias")
-    st.markdown("Armá tu cruce. Acá no hay empates: el modelo evalúa quién avanza de ronda (por victoria en los 90 minutos, alargue o penales).")
+    st.markdown("Armá tu cruce. Acá no hay empates: el modelo evalúa quién avanza de ronda.")
     
     col_izq, col_med, col_der = st.columns([2, 1, 2])
     
@@ -386,11 +459,11 @@ with tab_llaves:
 
 # --- PESTAÑA 5: SIMULADOR MONTE CARLO ---
 with tab_montecarlo:
-    st.subheader("Motor de Simulación Monte Carlo")
+    st.subheader("Motor de Simulación Predictiva")
     
     tipo_simulacion = st.radio(
-        "Seleccioná el tipo de simulación:", 
-        ["Fase de Grupos (Detalle de posiciones)", "Torneo Completo (Probabilidades de campeonato)"],
+        "Seleccioná el tipo de análisis:", 
+        ["Fase de Grupos (Detalle de posiciones)", "Torneo Completo (Llave oficial FIFA)"],
         horizontal=True
     )
     
@@ -398,7 +471,7 @@ with tab_montecarlo:
     
     with col_izq:
         num_simulaciones = st.slider(
-            "Cantidad de simulaciones:", 
+            "Cantidad de escenarios paralelos:", 
             min_value=1000, 
             max_value=20000, 
             value=1000, 
@@ -406,7 +479,7 @@ with tab_montecarlo:
         )
         
         if num_simulaciones > 5000:
-            st.warning("Aviso: Ejecutar más de 5.000 simulaciones puede tardar dependiendo de la capacidad del servidor.")
+            st.warning("Aviso: Procesar más de 5.000 universos paralelos puede demorar unos segundos.")
             
         if "Fase de Grupos" in tipo_simulacion:
             grupo_mc = st.selectbox("Elegí el grupo a simular:", list(grupos.keys()), key="sel_mc_g")
@@ -421,15 +494,16 @@ with tab_montecarlo:
             if "Fase de Grupos" in tipo_simulacion:
                 with st.spinner(f'Simulando el grupo {num_simulaciones} veces...'):
                     df_mc_grupo = simular_grupo_montecarlo(grupos[grupo_mc], equipos_elo, iteraciones=num_simulaciones)
-                    st.success("¡Simulación completada!")
+                    st.success("¡Análisis completado!")
                     st.dataframe(
                         df_mc_grupo.style.background_gradient(cmap='Greens', axis=None).format("{:.1f}%"),
                         use_container_width=True
                     )
             else:
-                df_torneo = simular_torneo_completo(equipos_elo, grupos, iteraciones=num_simulaciones)
-                st.success(f"¡Simulación de {num_simulaciones} escenarios completada!")
-                st.dataframe(
-                    df_torneo.style.background_gradient(cmap='Blues', axis=None).format("{:.1f}%"),
-                    use_container_width=True
-                )
+                with st.spinner(f'Procesando {num_simulaciones} torneos en la llave oficial...'):
+                    df_torneo = simular_torneo_completo(equipos_elo, grupos, iteraciones=num_simulaciones)
+                    st.success(f"¡Simulación de {num_simulaciones} escenarios completada con éxito!")
+                    st.dataframe(
+                        df_torneo.style.background_gradient(cmap='Blues', axis=None).format("{:.1f}%"),
+                        use_container_width=True
+                    )
