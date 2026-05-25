@@ -5,3 +5,5 @@ pandas
 matplotlib
 seaborn
 Jinja2
+requests
+beautifulsoup4
